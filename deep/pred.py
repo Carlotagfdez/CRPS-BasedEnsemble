@@ -13,7 +13,7 @@ import torch
 import numpy as np
 import xarray as xr
 
-import deep4downscaling.trans as trans
+from . import trans as trans
 
 def _predict(model: torch.nn.Module, device: str,
              batch_size: int=None, **data: np.ndarray,) -> np.ndarray:
