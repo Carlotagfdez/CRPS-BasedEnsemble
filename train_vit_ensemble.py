@@ -3,7 +3,7 @@ DATA_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/0.Datos'
 FIGURES_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/Figuras'
 MODELS_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/deep/models'
 PREDS_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/Preds'
-ASYM_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/asym-parameters'
+ASYM_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/asym_parameters'
 
 # Import libraries
 import xarray as xr
@@ -12,19 +12,16 @@ import torch
 from torch.utils.data import DataLoader, random_split
 from importlib import reload
 
-import sys; 
-sys.path.append()
+import sys
 
-import viz
-import trans
+import deep.viz
+import deep.trans as trans
 import deep.loss
 import deep.utils
 import deep.models
-import deep.train
+import deep.train 
 import deep.pred
-import metrics
-import metrics_ccs
-import utils 
+import deep.utils 
 # Uncertainty approach
 uncertainty_approach = 'Ensemble'
 

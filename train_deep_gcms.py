@@ -3,7 +3,7 @@ DATA_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/0.Datos'
 FIGURES_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/Figuras'
 MODELS_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/TrainedModels'
 PREDS_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/Preds'
-ASYM_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/asym-parameters'
+ASYM_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/asym_parameters'
 
 # Import libraries
 import xarray as xr
@@ -23,8 +23,11 @@ import deep.train
 import deep.pred
 import deep.utils 
 
-# Uncertainty approach
-uncertainty_approach = 'MSE'
+# Opción 1:
+uncertainty_approach = 'ASYM' 
+
+# Opción 2:
+# uncertainty_approach = 'CRPS'
 
 # Set device
 device = 'cuda'
@@ -34,32 +37,10 @@ predictor_filename = f'{DATA_PATH}/ERA5_NorthAtlanticRegion_1-5dg_full.nc'
 predictor = xr.open_dataset(predictor_filename)
 predictor = predictor.load()
 
-# Subset predictors 
-predictor = predictor.sel(lon=slice(-24, 22.5))
-
-# Extent lattiude to 32 grid points
-lat = predictor.lat.values
-dlat = np.diff(lat).mean()
-n_extra = 32 - lat.size
-new_lat = np.concatenate([lat, lat[-1] + dlat * np.arange(1, n_extra + 1)])
-predictor = predictor.reindex(lat=new_lat, method='nearest')
-
 # Load predictand
 predictand_filename = f'{DATA_PATH}/pr_AEMET.nc'
 predictand = xr.open_dataset(predictand_filename)
 predictand = predictand.load()
-
-# Subset predictand
-predictand = predictand.sel(lon=slice(-9.425, 3.375))
-
-# Extend the latitude to 264 grid points
-lat = predictand.lat.values
-dlat = np.diff(lat).mean()
-
-n_extra = 256 - lat.size
-new_lat = np.concatenate([lat, lat[-1] + dlat * np.arange(1, n_extra + 1)])
-
-predictand = predictand.reindex(lat=new_lat)
 
 # Remove days with nans in the predictor
 predictor = trans.remove_days_with_nans(predictor)
@@ -83,9 +64,27 @@ x_train_stand = trans.standardize(data_ref=x_train, data=x_train)
 # Stack the predictand
 y_train_stack = y_train.stack(gridpoint=('lat', 'lon'))
 
-# Fit the Gammas for the ASYM loss function
+# Por ser el modelo DeepESD:
+y_mask = trans.compute_valid_mask(y_train) 
+y_mask_stack = y_mask.stack(gridpoint=('lat', 'lon'))
+y_mask_stack_filt = y_mask_stack.where(y_mask_stack==1, drop=True)
+y_train_stack_filt = y_train_stack.where(y_train_stack['gridpoint'] == y_mask_stack_filt['gridpoint'],
+                                             drop=True)
 
-loss_function = deep.loss.MseLoss(ignore_nans=True)
+
+# Fit the Gammas for the ASYM loss function
+if uncertainty_approach == 'ASYM':
+    loss_function = deep.loss.Asym(ignore_nans=True,
+                                   asym_path=ASYM_PATH)
+    if not loss_function.parameters_exist():
+        loss_function.compute_parameters(data=y_train_stack,
+                                     var_target='pr')
+    loss_function.load_parameters()
+    loss_function.prepare_parameters(device=device)
+    loss_function.mask_parameters(mask=y_mask)
+
+elif uncertainty_approach == 'CRPS':
+    loss_function = deep.loss.CRPSLoss(ignore_nans=True)
 
 # Convert the data to numpy arrays
 x_train_stand_arr = trans.xarray_to_numpy(x_train_stand)
@@ -108,19 +107,21 @@ valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size,
                               shuffle=True)
 
 # Set model name
-model_name = f'vit_{uncertainty_approach}'
+model_name = f'DeepESD_{uncertainty_approach}'
 
 # Create model
-model = deep.models.ViT(x_shape=x_train_stand_arr.shape,
-                                         y_shape=y_train_arr.shape,
-                                         patch_size=2,
-                                         dim=768,
-                                         depth=12,
-                                         num_heads=12,
-                                         mlp_dim=3072,
-                                         orog=None,
-                                         last_relu=True,
-                                         stochastic=False)
+if uncertainty_approach == 'ASYM':
+    model = deep.models.DeepESDpr(x_shape=x_train_stand_arr.shape,
+                                      y_shape=y_train_arr.shape,
+                                      filters_last_conv=1,
+                                      stochastic=False)
+elif uncertainty_approach == 'CRPS':
+    model = deep.models.NoisyDeepESD(x_shape=x_train_stand_arr.shape, y_shape=y_train_arr.shape,
+                                    filters_last_conv=False, num_channels_noise=3,
+                                    last_relu=False,
+                                    members_for_training=2)
+
+
 
 # Wrap the model for multi-GPU training if available
 if torch.cuda.device_count() > 1:
@@ -159,8 +160,66 @@ x_test_stand = trans.standardize(data_ref=x_train, data=x_test)
 y_mask = trans.compute_valid_mask(y_test)
 
 # Compute predictions
-pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
+if loss_function == 'ASYM':
+    pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
                                                               var_target='pr', mask=y_mask, batch_size=16)
-
+elif loss_function == 'CRPS':
+    pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
+                                                              var_target='pr', mask=y_mask, batch_size=16,ensemble_size=10)
 # Save the predictions
 pred_test.to_netcdf(f'{PREDS_PATH}/{model_name}.nc')
+
+
+## SEGUNDA PARTE APLICAR LOS RESULTADOS PARA LOS GCMS: 
+
+gcm_raw = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/GCMResults' 
+gcm_hist_filename = f'{gcm_raw}/CanESM5_r1i1p1f1_historical.nc'
+gcm_hist = xr.open_dataset(f'{gcm_raw}/CanESM5_r1i1p1f1_historical.nc').load()
+
+gcm_fut_filename = f'{gcm_raw}/CanESM5_r1i1p1f1_ssp370.nc'
+gcm_fut = xr.open_dataset(f'{gcm_raw}/CanESM5_r1i1p1f1_ssp370.nc').load()
+
+
+"""
+Before feeding the data to the model, and as explained in the manuscript, GCM predictors are first bias-corrected
+and then standardized.
+"""
+
+gcm_hist_corrected = trans.scaling_delta_correction(data=gcm_hist,
+                                                    gcm_hist=gcm_hist, obs_hist=x_train)
+gcm_fut_corrected = trans.scaling_delta_correction(data=gcm_fut,
+                                                   gcm_hist=gcm_hist, obs_hist=x_train)
+
+gcm_hist_corrected_stand = trans.standardize(data_ref=x_train, data=gcm_hist_corrected)
+gcm_fut_corrected_stand = trans.standardize(data_ref=x_train, data=gcm_fut_corrected)
+
+
+"""
+Compute the projections for the historical and future periods in a manner similar to the predictions for the test
+set, and save them to the file_name_hist and file_name_fut paths.
+"""
+
+if loss_function == 'ASYM':
+    proj_historical = deep.pred.compute_preds_standard(x_data=gcm_hist_corrected_stand, model=model,
+                                                        device=device, var_target='pr',
+                                                        mask=y_mask, batch_size=16)
+    proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model,
+                                                    device=device, var_target='pr',
+                                                    mask=y_mask, batch_size=16)
+elif loss_function == 'CRPS':
+    proj_historical = deep.pred.compute_preds_standard(x_data=gcm_hist_corrected_stand, model=model,
+                                                        device=device, var_target='pr',
+                                                        mask=y_mask, batch_size=16, ensemble_size=10)
+    proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model,
+                                                    device=device, var_target='pr',
+                                                    mask=y_mask, batch_size=16, ensemble_size=10)
+
+file_name_hist = f'GCM_proj_historical_{model_name}'
+file_name_fut = f'GCM_proj_future_{model_name}'
+
+
+PROJ_PATH = '/gpfs/projects/meteo/WORK/garciafdez/data_PNACC/CRPS-BasedEnsemble/GCMResults'
+
+proj_historical.to_netcdf(f'{PROJ_PATH}/{file_name_hist}.nc')
+proj_future.to_netcdf(f'{PROJ_PATH}/{file_name_fut}.nc')
+
