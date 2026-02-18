@@ -220,10 +220,10 @@ for j, da in enumerate(data_list):
         add_colorbar=False
     )
 
-    # 👉 SIN títulos
+    # SIN títulos
     axes_maps[j].set_title("")
 
-    # 👉 Borde con color del modelo
+    #  Borde con color del modelo
     for spine in axes_maps[j].spines.values():
         spine.set_edgecolor(model_colors[j])
         spine.set_linewidth(5)
@@ -232,7 +232,7 @@ for j, da in enumerate(data_list):
     axes_maps[j].add_feature(cfeature.BORDERS, linestyle=':')
     axes_maps[j].set_extent([lon_min, lon_max, lat_min, lat_max])
 
-# 👉 Colorbar más bajita
+# Colorbar más bajita
 cbar_ax = fig.add_axes([0.90, 0.17, 0.010, 0.20])
 cbar = fig.colorbar(mappable, cax=cbar_ax)
 cbar.set_label("Pr (mm)", fontweight='bold')
@@ -242,3 +242,39 @@ plt.savefig("Figuras/Fig_Combined_2Lines.png", dpi=300, bbox_inches="tight")
 plt.savefig("Figuras/Fig_Combined_2Lines.pdf", dpi=300, bbox_inches="tight")
 plt.close()
 
+
+
+
+
+import xarray as xr
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import pandas as pd
+
+# Cargar el dataset
+vitRmse = xr.open_dataset("Preds/ViT_ASYM.nc")
+
+# Seleccionar un día del 2010, por ejemplo 15 de junio de 2010
+
+pr_day = vitRmse['pr'].sel(time='2018-04-08')
+
+# Crear la figura
+fig = plt.figure(figsize=(10, 8))
+ax = plt.axes(projection=ccrs.PlateCarree())
+
+# Añadir características geográficas
+ax.add_feature(cfeature.COASTLINE)
+ax.add_feature(cfeature.BORDERS, linestyle=':')
+ax.set_extent([-10, 5, 36, 44], crs=ccrs.PlateCarree())  # Extensión aproximada España
+
+# Graficar los datos
+im = ax.pcolormesh(pr_day['lon'], pr_day['lat'], pr_day, cmap='BrBG')
+
+# Añadir colorbar
+cbar = plt.colorbar(im, ax=ax, orientation='vertical', shrink=0.7)
+cbar.set_label('Precipitación (mm)')
+
+plt.title(f'Precipitación vit_ASYM el ')
+plt.savefig("Figuras/prueba.png", dpi=300, bbox_inches="tight")
+plt.close()
