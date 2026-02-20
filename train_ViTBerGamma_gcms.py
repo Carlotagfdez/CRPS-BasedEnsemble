@@ -147,7 +147,7 @@ if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE' or uncertaint
                                          orog=None,
                                          last_relu=True,
                                          stochastic=True)
-elif uncertainty_approach == 'CRPS' or  'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     model = deep.models.NoisyViT(x_shape=x_train_stand_arr.shape,
                                               y_shape=y_train_arr.shape,
                                               patch_size=2,
@@ -178,26 +178,31 @@ patience_early_stopping = 40
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     
 # Train the model
-train_loss, val_loss = deep.train.standard_training_loop(model=model, 
-                                                            model_name=model_name, 
-                                                            model_path=MODELS_PATH,
-                                                            device=device, 
-                                                            num_epochs=num_epochs,
-                                                            loss_function=loss_function, 
-                                                            optimizer=optimizer,
-                                                            train_data=train_dataloader,
-                                                            valid_data=valid_dataloader,
-                                                            patience_early_stopping=patience_early_stopping,
-                                                            mixed_precision=True)
+# train_loss, val_loss = deep.train.standard_training_loop(model=model, 
+#                                                             model_name=model_name, 
+#                                                             model_path=MODELS_PATH,
+#                                                             device=device, 
+#                                                             num_epochs=num_epochs,
+#                                                             loss_function=loss_function, 
+#                                                             optimizer=optimizer,
+#                                                             train_data=train_dataloader,
+#                                                             valid_data=valid_dataloader,
+#                                                             patience_early_stopping=patience_early_stopping,
+#                                                             mixed_precision=True)
 
 # Load the model weights into the architecture
-model.load_state_dict(torch.load(f'{MODELS_PATH}/{model_name}.pt', weights_only=True))
+# model.load_state_dict(torch.load(f'{MODELS_PATH}/{model_name}.pt', weights_only=True))
+# state_dict = torch.load(f'{MODELS_PATH}/{model_name}.pt', weights_only=True)
+# new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+# model.load_state_dict(new_state_dict)
 
 
-# state_dict = torch.load(f'{MODELS_PATH}/{model_name}.pt', map_location=torch.device('cpu'))
-# model.load_state_dict(state_dict, strict=True)
-# model.to('cpu')
-# device = 'cpu'
+model_path = f'{MODELS_PATH}/{model_name}.pt'
+state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+model.load_state_dict(new_state_dict, strict=True)
+model.to('cpu')
+device = 'cpu'
 
 # Standardize the test data
 x_test_stand = trans.standardize(data_ref=x_train, data=x_test)
@@ -209,7 +214,7 @@ y_mask = trans.compute_valid_mask(y_test)
 if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE':
     pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
                                                               var_target='pr', mask=y_mask, batch_size=16)
-elif uncertainty_approach == 'CRPS' or 'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
                                                               ensemble_size=2, var_target='pr', mask=y_mask, batch_size=16)
 elif uncertainty_approach == 'BerGamma':
@@ -282,7 +287,7 @@ if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE':
     proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model,
                                                     device=device, var_target='pr',
                                                     mask=y_mask, batch_size=16)
-elif uncertainty_approach == 'CRPS' or 'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     proj_historical = deep.pred.compute_preds_standard(x_data=gcm_hist_corrected_stand, model=model, device=device,
                                                               ensemble_size=2, var_target='pr', mask=y_mask, batch_size=16)
     proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model, device=device,

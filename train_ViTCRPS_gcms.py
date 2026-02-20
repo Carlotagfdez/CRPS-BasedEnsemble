@@ -148,7 +148,7 @@ if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE' or uncertaint
                                          orog=None,
                                          last_relu=True,
                                          stochastic=False)
-elif uncertainty_approach == 'CRPS' or  'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     model = deep.models.NoisyViT(x_shape=x_train_stand_arr.shape,
                                               y_shape=y_train_arr.shape,
                                               patch_size=2,
@@ -210,7 +210,7 @@ y_mask = trans.compute_valid_mask(y_test)
 if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE':
     pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
                                                               var_target='pr', mask=y_mask, batch_size=16)
-elif uncertainty_approach == 'CRPS' or 'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     pred_test = deep.pred.compute_preds_standard(x_data=x_test_stand, model=model, device=device,
                                                               ensemble_size=2, var_target='pr', mask=y_mask, batch_size=16)
 elif uncertainty_approach == 'BerGamma':
@@ -283,7 +283,7 @@ if uncertainty_approach == 'ASYM' or uncertainty_approach == 'MSE':
     proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model,
                                                     device=device, var_target='pr',
                                                     mask=y_mask, batch_size=16)
-elif uncertainty_approach == 'CRPS' or 'CRPS_Spectral':
+elif uncertainty_approach == 'CRPS' or uncertainty_approach == 'CRPS_Spectral':
     proj_historical = deep.pred.compute_preds_standard(x_data=gcm_hist_corrected_stand, model=model, device=device,
                                                               ensemble_size=2, var_target='pr', mask=y_mask, batch_size=16)
     proj_future = deep.pred.compute_preds_standard(x_data=gcm_fut_corrected_stand, model=model, device=device,
